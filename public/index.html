@@ -3,23 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Application</title>
+    <title>LineChat V2 - Owain</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
-        #messages { list-style-type: none; margin: 0; padding: 0; }
-        #messages li { padding: 8px; margin-bottom: 4px; border-bottom: 1px solid #ddd; }
-        #message-form { display: flex; }
-        #message-input { flex: 1; }
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        #messages {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+            #messages li {
+                padding: 8px;
+                margin-bottom: 4px;
+                border-bottom: 1px solid #ddd;
+            }
+
+        #message-form {
+            display: flex;
+            margin-top: 10px;
+        }
+
+        #message-input {
+            flex: 1;
+        }
+
+        .banner {
+            background-color: #f0f0f0;
+            padding: 10px;
+            text-align: center;
+            font-size: 24px;
+        }
+
+        #typing {
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        #online-users {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <div class="container mt-5">
+    <div class="banner">LineChat V2 - Owain</div>
+    <div class="container mt-3">
         <div class="card">
             <div class="card-header text-center">
                 <h4>Chat Room</h4>
+                <button id="change-username" class="btn btn-secondary btn-sm">Change Username</button>
+                <div id="online-users"></div>
             </div>
             <div class="card-body">
                 <ul id="messages" class="mb-3"></ul>
+                <div id="typing"></div>
                 <form id="message-form">
                     <input id="message-input" autocomplete="off" class="form-control mr-2" placeholder="Type a message..." />
                     <button class="btn btn-primary">Send</button>
@@ -35,27 +78,61 @@
             const form = $('#message-form');
             const input = $('#message-input');
             const messages = $('#messages');
+            const typingIndicator = $('#typing');
+            const onlineUsers = $('#online-users');
+            const changeUsernameButton = $('#change-username');
+
+            let typing = false;
+            let timeout;
 
             const username = getUsername() || prompt('Enter your username:');
-            document.cookie = `username=${username};path=/`;
+            setUsername(username);
 
             function getUsername() {
                 const match = document.cookie.match(new RegExp('(^| )username=([^;]+)'));
                 return match ? match[2] : null;
             }
 
-            form.submit(function (e) {
-                e.preventDefault();
-                if (input.val()) {
-                    socket.emit('chat message', { username: username, text: input.val() });
-                    input.val('');
+            function setUsername(name) {
+                document.cookie = `username=${name};path=/`;
+                changeUsernameButton.text(`Change Username (${name})`);
+                socket.emit('set username', name);
+            }
+
+            changeUsernameButton.click(function () {
+                const newUsername = prompt('Enter new username:');
+                if (newUsername) {
+                    setUsername(newUsername);
                 }
             });
 
+            form.submit(function (e) {
+                e.preventDefault();
+                if (input.val()) {
+                    socket.emit('chat message', { username: getUsername(), text: input.val() });
+                    input.val('');
+                    stopTyping();
+                }
+            });
+
+            input.on('input', function () {
+                if (!typing) {
+                    typing = true;
+                    socket.emit('typing', getUsername());
+                }
+                clearTimeout(timeout);
+                timeout = setTimeout(stopTyping, 2000);
+            });
+
+            function stopTyping() {
+                typing = false;
+                socket.emit('stop typing');
+            }
+
             socket.on('chat message', function (msg) {
-                const item = $('<li>').text(`${msg.username}: ${msg.text}`);
+                const item = $('<li>').text(`[${msg.timestamp}] ${msg.username}: ${msg.text}`);
                 messages.append(item);
-                window.scrollTo(0, document.body.scrollHeight);
+                messages.scrollTop(messages.prop('scrollHeight'));
 
                 // Play notification sound
                 const audio = new Audio('notification.mp3');
@@ -65,6 +142,18 @@
                 if (Notification.permission === 'granted') {
                     new Notification('New message', { body: `${msg.username}: ${msg.text}` });
                 }
+            });
+
+            socket.on('typing', function (username) {
+                typingIndicator.text(`${username} is typing...`);
+            });
+
+            socket.on('stop typing', function () {
+                typingIndicator.text('');
+            });
+
+            socket.on('update users', function (users) {
+                onlineUsers.html('<strong>Online Users:</strong> ' + users.join(', '));
             });
 
             if (Notification.permission !== 'denied') {
