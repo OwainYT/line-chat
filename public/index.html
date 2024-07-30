@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Application</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        #messages { list-style-type: none; margin: 0; padding: 0; }
+        #messages li { padding: 8px; margin-bottom: 4px; border-bottom: 1px solid #ddd; }
+        #message-form { display: flex; }
+        #message-input { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="card">
+            <div class="card-header text-center">
+                <h4>Chat Room</h4>
+            </div>
+            <div class="card-body">
+                <ul id="messages" class="mb-3"></ul>
+                <form id="message-form">
+                    <input id="message-input" autocomplete="off" class="form-control mr-2" placeholder="Type a message..." />
+                    <button class="btn btn-primary">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script>
+        $(function () {
+            const socket = io();
+            const form = $('#message-form');
+            const input = $('#message-input');
+            const messages = $('#messages');
+
+            const username = getUsername() || prompt('Enter your username:');
+            document.cookie = `username=${username};path=/`;
+
+            function getUsername() {
+                const match = document.cookie.match(new RegExp('(^| )username=([^;]+)'));
+                return match ? match[2] : null;
+            }
+
+            form.submit(function (e) {
+                e.preventDefault();
+                if (input.val()) {
+                    socket.emit('chat message', { username: username, text: input.val() });
+                    input.val('');
+                }
+            });
+
+            socket.on('chat message', function (msg) {
+                const item = $('<li>').text(`${msg.username}: ${msg.text}`);
+                messages.append(item);
+                window.scrollTo(0, document.body.scrollHeight);
+
+                // Play notification sound
+                const audio = new Audio('notification.mp3');
+                audio.play();
+
+                // Show popup notification
+                if (Notification.permission === 'granted') {
+                    new Notification('New message', { body: `${msg.username}: ${msg.text}` });
+                }
+            });
+
+            if (Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+        });
+    </script>
+</body>
+</html>
